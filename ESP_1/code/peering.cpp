@@ -1,0 +1,1 @@
+// Aici voi incerca conectarea cu celalalt ESP32
