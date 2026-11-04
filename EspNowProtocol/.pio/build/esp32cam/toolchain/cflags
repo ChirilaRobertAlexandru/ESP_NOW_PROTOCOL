@@ -1,0 +1,6 @@
+-Wno-frame-address
+-mlongcalls
+-fno-builtin-memcpy
+-fno-builtin-memset
+-fno-builtin-bzero
+"-specs=C:/ESP_NOW/ESP_NOW_PROTOCOL/EspNowProtocol/.pio/build/esp32cam/specs/picolibc.specs"

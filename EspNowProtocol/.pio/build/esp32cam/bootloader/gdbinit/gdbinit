@@ -1,0 +1,2 @@
+source C:/ESP_NOW/ESP_NOW_PROTOCOL/EspNowProtocol/.pio/build/esp32cam/bootloader/gdbinit/symbols
+source C:/ESP_NOW/ESP_NOW_PROTOCOL/EspNowProtocol/.pio/build/esp32cam/bootloader/gdbinit/connect
