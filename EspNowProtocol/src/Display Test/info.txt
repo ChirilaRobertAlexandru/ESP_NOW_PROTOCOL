@@ -1,0 +1,1 @@
+Aici testam daca putem afisa mesaje introduse din monitorul serial si sa le afisam pe display.

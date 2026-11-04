@@ -1,0 +1,9 @@
+pio run -t upload      ->     incarcaa codul pe placuta
+pio device monitor     ->     deschide monitorul din pio
+pio device monitor --echo     ->     penmite sa vezi in timp real ce scri catre display
+pio run                ->     ruleaza toate fisierele cpp
+pio run -e nume_fisier_din_platformio.ini -t upload     ->     incarci un cod specific
+pio device list        ->     afiseaza fiecare port
+pio run -t clean       ->     Șterge memoria cache și toate fișierele compilate anterior
+pio run -e nume_mediu -t upload -t monitor     ->     Execută tot lanțul deodată
+pio run -t erase       -> sterge tot codul din placuta
