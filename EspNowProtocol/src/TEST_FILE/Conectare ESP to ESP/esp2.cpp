@@ -1,69 +1,130 @@
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <esp_now.h>
 #include <WiFi.h>
 
-// Adresa MAC a plăcii ESP 2
-uint8_t adresaDestinatar[] = {0x88, 0x57, 0x21, 0x75, 0xA2, 0xC0};
+// Pinii si setarile pentru Display
+#define I2C_SDA 14
+#define I2C_SCL 15
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 32
+#define OLED_RESET -1 
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-String messageBuffer = "";
+// Pinii pentru LED-uri
+#define LED1 12
+#define LED2 13
+#define LED3 2
 
-// Funcție apelată automat când primești un mesaj
+// Variabile pentru preluarea mesajului
+String comandaPrimita = "";
+bool comandaNoua = false;
+
+// Functia care ruleaza automat cand vine un mesaj de la ESP1
 void laPrimire(const uint8_t * mac, const uint8_t *datePrimite, int lungime) {
-  Serial.print("\n[Mesaj primit]: ");
+  comandaPrimita = "";
   for (int i = 0; i < lungime; i++) {
-    Serial.print((char)datePrimite[i]);
+    comandaPrimita += (char)datePrimite[i];
   }
-  Serial.println("\n");
-}
-
-// Funcție apelată automat ca să-ți confirme dacă mesajul a ajuns
-void laTrimitere(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? " -> [Mesaj livrat cu succes]" : " -> [Eroare la livrare]");
+  comandaNoua = true; // Semnalam procesorului ca avem de munca
 }
 
 void setup() {
   Serial.begin(115200);
   
-  // ESP-NOW funcționează doar cu antena Wi-Fi pornită în modul Station
-  WiFi.mode(WIFI_STA);
+  // Setam pinii LED
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
 
+  // Initializare I2C si OLED
+  Wire.begin(I2C_SDA, I2C_SCL);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("Eroare OLED"));
+    for(;;);
+  }
+  
+  // Initializare Wi-Fi si ESP-NOW
+  WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Eroare la initializarea ESP-NOW");
+    Serial.println("Eroare ESP-NOW");
     return;
   }
-
-  // Înregistrăm funcțiile care ascultă trimiterea/primirea
-  esp_now_register_send_cb(laTrimitere);
   esp_now_register_recv_cb(laPrimire);
 
-  // Configurăm „prietenul” (placa țintă)
-  esp_now_peer_info_t infoPereche;
-  memcpy(infoPereche.peer_addr, adresaDestinatar, 6);
-  infoPereche.channel = 0;  
-  infoPereche.encrypt = false;
+  // Ecran de pornire
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("ESP 2 RECEPTOR");
+  display.println("Astept comenzi...");
+  display.display();
   
-  if (esp_now_add_peer(&infoPereche) != ESP_OK){
-    Serial.println("Eroare la adaugarea perechii");
-    return;
-  }
-  
-  Serial.println("\n--- ESP 1 PREGĂTIT ---");
-  Serial.println("Scrie un mesaj si apasa Enter:");
+  Serial.println("\n--- ESP 2 PREGATIT ---");
 }
 
 void loop() {
-  while (Serial.available() > 0) {
-    char litera = Serial.read(); 
-    
-    if (litera == '\n' || litera == '\r') {
-      if (messageBuffer.length() > 0) {
-        // Trimitem textul adunat
-        esp_now_send(adresaDestinatar, (uint8_t *)messageBuffer.c_str(), messageBuffer.length());
-        messageBuffer = ""; 
+  // Daca am primit o comanda noua, o descifram
+  if (comandaNoua) {
+    comandaPrimita.trim();
+    Serial.println("\nMesaj brut primit: " + comandaPrimita);
+
+    // Gasim pozitiile spatiilor libere pentru a separa numerele
+    int spatiu1 = comandaPrimita.indexOf(' ');
+    int spatiu2 = comandaPrimita.indexOf(' ', spatiu1 + 1);
+    int spatiu3 = comandaPrimita.indexOf(' ', spatiu2 + 1);
+
+    // Verificam daca formatul a fost respectat (adica daca exista toate cele 3 spatii)
+    if (spatiu1 > 0 && spatiu2 > 0 && spatiu3 > 0) {
+      
+      // Extragem valorile
+      int numarLed = comandaPrimita.substring(0, spatiu1).toInt();
+      int nrClipiri = comandaPrimita.substring(spatiu1 + 1, spatiu2).toInt();
+      float tOn = comandaPrimita.substring(spatiu2 + 1, spatiu3).toFloat();
+      float tOff = comandaPrimita.substring(spatiu3 + 1).toFloat();
+
+      // Identificam pinul fizic dorit
+      int pinAles = -1;
+      if (numarLed == 1) pinAles = LED1;
+      else if (numarLed == 2) pinAles = LED2;
+      else if (numarLed == 3) pinAles = LED3;
+
+      // Daca s-a cerut un LED valid (1, 2 sau 3), executam comanda
+      if (pinAles != -1 && nrClipiri > 0) {
+        
+        // 1. Afisam informatiile pe display
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.print("ledul "); display.print(numarLed); display.println(" ON");
+        display.print("clipeste de "); display.print(nrClipiri); display.println(" ori");
+        display.print("Ton="); display.print(tOn); display.print(" Toff="); display.println(tOff);
+        display.display();
+
+        // 2. Executam fizic aprinderea/stingerea
+        for (int i = 0; i < nrClipiri; i++) {
+          digitalWrite(pinAles, HIGH);
+          delay(tOn * 1000); // Inmultim cu 1000 pentru a transforma secundele in milisecunde
+          digitalWrite(pinAles, LOW);
+          delay(tOff * 1000);
+        }
+
+        // 3. Resetam display-ul
+        display.clearDisplay();
+        display.setCursor(0, 0);
+        display.println("Comanda executata!");
+        display.println("Astept alta...");
+        display.display();
+      } else {
+        Serial.println("Eroare: Numar LED invalid sau clipiri 0.");
       }
     } else {
-      messageBuffer += litera;
-      Serial.print(litera); // Ecou local pentru a vedea ce scrii
+      Serial.println("Eroare: Format incorect. Foloseste: LED NR_CLIPIRI TON TOFF");
     }
+
+    // Marcam comanda ca fiind procesata
+    comandaNoua = false;
   }
 }
